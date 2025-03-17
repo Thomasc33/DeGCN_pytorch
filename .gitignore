@@ -1,0 +1,5 @@
+*.skeleton
+*.zip
+*.npz
+__pycache__/
+work_dir/

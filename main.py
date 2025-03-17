@@ -33,7 +33,7 @@ from copy import deepcopy
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
-import apex
+# import apex
 
 def init_seed(seed):
     torch.cuda.manual_seed_all(seed)
@@ -261,12 +261,8 @@ class Processor():
         self.best_acc_epoch = 0
 
         if self.arg.half:
-            self.print_log('Use Half Traning!')
-            self.model, self.optimizer = apex.amp.initialize(
-                self.model,
-                self.optimizer,
-                opt_level='O1'
-            )
+            self.print_log('Use Half Training with PyTorch native AMP!')
+            self.scaler = torch.cuda.amp.GradScaler()
         else:
             if type(self.arg.device) is list:
                 if len(self.arg.device) > 1:
@@ -453,18 +449,21 @@ class Processor():
             timer['dataloader'] += self.split_time()
 
             # forward
-            output = self.model(data)
-            loss = sum([self.loss(out, label) for out in output])
-            output = sum(output)
-
-            # backward
             self.optimizer.zero_grad()
             if self.arg.half:
-                with apex.amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                    scaled_loss.backward()
+                with torch.cuda.amp.autocast():
+                    output = self.model(data)
+                    loss = sum([self.loss(out, label) for out in output])
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                output = sum(output)  # For accuracy calculation
             else:
+                output = self.model(data)
+                loss = sum([self.loss(out, label) for out in output])
                 loss.backward()
-            self.optimizer.step()
+                self.optimizer.step()
+                output = sum(output)
 
             loss_value.append(loss.data.item())
             timer['model'] += self.split_time()
