@@ -8,6 +8,8 @@ import logging
 import h5py
 from sklearn.model_selection import train_test_split
 
+ri = True
+
 root_path = './'
 stat_path = osp.join(root_path, 'statistics')
 setup_file = osp.join(stat_path, 'setup.txt')
@@ -168,7 +170,7 @@ def split_dataset(skes_joints, label, performer, setup, evaluation, save_path):
     test_x = skes_joints[test_indices]
     test_y = one_hot_vector(test_labels)
 
-    save_name = 'NTU120_%s.npz' % evaluation
+    save_name = f'NTU120_{evaluation}{"_ri" if ri else ""}.npz'
     np.savez(save_name, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
 
     # # Save data into a .h5 file
@@ -229,9 +231,10 @@ def get_indices(performer, setup, evaluation='CSub'):
 if __name__ == '__main__':
     setup = np.loadtxt(setup_file, dtype=np.int32)  # camera id: 1~32
     performer = np.loadtxt(performer_file, dtype=np.int32)  # subject id: 1~106
-
-    # copy performer_file and replace label_file for to make the model do re-identification
-    label = np.loadtxt(label_file, dtype=np.int32) - 1  # action label: 0~119
+    if ri:
+        label = np.loadtxt(performer_file, dtype=np.int32) - 1
+    else:
+        label = np.loadtxt(label_file, dtype=np.int32) - 1  # action label: 0~119
 
     frames_cnt = np.loadtxt(frames_file, dtype=np.int32)  # frames_cnt
     skes_name = np.loadtxt(skes_name_file, dtype=np.string_)
@@ -244,5 +247,7 @@ if __name__ == '__main__':
     skes_joints = align_frames(skes_joints, frames_cnt)  # aligned to the same frame length
 
     evaluations = ['CSet', 'CSub']
+    if ri:
+        evaluations = ['CSet']
     for evaluation in evaluations:
         split_dataset(skes_joints, label, performer, setup, evaluation, save_path)
